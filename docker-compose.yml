@@ -25,9 +25,9 @@ services:
     depends_on:
       - db
     networks:
-        default:
-        internal:
-        ctfrei-bot:
+      default:
+      internal:
+      ctfrei-bot:
 
   bot:
     build:
@@ -75,7 +75,7 @@ services:
     volumes:
     - .data/redis:/data
     networks:
-        internal:
+      internal:
 
 networks:
   default:
