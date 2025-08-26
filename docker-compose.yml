@@ -81,5 +81,5 @@ networks:
     default:
     internal:
         internal: true
-  ctfrei-bot:
-    internal: true
+    ctfrei-bot:
+        internal: true
