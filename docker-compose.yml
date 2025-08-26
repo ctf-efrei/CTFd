@@ -78,8 +78,8 @@ services:
         internal:
 
 networks:
-    default:
-    internal:
-        internal: true
-    ctfrei-bot:
-        internal: true
+  default:
+  internal:
+    internal: true
+  ctfrei-bot:
+    internal: true
