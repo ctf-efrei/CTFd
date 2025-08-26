@@ -365,12 +365,10 @@ def import_ctf(backup, erase=True):
 
                         try:
                             table.insert(entry)
-                        except (ProgrammingError, TypeError):
+                        except ProgrammingError:
                             # MariaDB does not like JSON objects and prefers strings because it internally
                             # represents JSON with LONGTEXT.
                             # See Issue #973
-                            # We also catch TypeError here so that PyMySQL can properly send over JSON strings to MariaDB
-                            # https://github.com/PyMySQL/PyMySQL/commit/521e40050cb386a499f68f483fefd144c493053c
                             requirements = entry.get("requirements")
                             if requirements and isinstance(requirements, dict):
                                 entry["requirements"] = json.dumps(requirements)

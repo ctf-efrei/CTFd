@@ -26,9 +26,8 @@ while True:
     try:
         engine.raw_connection()
         break
-    except Exception as e:
-        print(e)
-        print("Waiting 1s for database connection")
+    except Exception:
+        print(".", end="", flush=True)
         time.sleep(1)
 
 print(f"{url.host} is ready")

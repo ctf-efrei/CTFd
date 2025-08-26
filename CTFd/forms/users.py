@@ -130,8 +130,8 @@ def attach_user_bracket_field(form_cls):
             for bracket in brackets
         ]
         select_field = SelectField(
-            _l("Bracket"),
-            description=_l("Competition bracket for your user"),
+            "Bracket",
+            description="Competition bracket for your user",
             choices=choices,
             validators=[InputRequired()],
         )
@@ -187,7 +187,6 @@ class UserBaseForm(BaseForm):
     verified = BooleanField("Verified")
     hidden = BooleanField("Hidden")
     banned = BooleanField("Banned")
-    change_password = BooleanField("Require password change on next login")
     submit = SubmitField("Submit")
 
 

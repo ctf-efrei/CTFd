@@ -185,10 +185,6 @@ def get_locale():
         user = get_current_user_attrs()
         if user and user.language:
             return user.language
-    # Use cookie language
-    cookie_lang = request.cookies.get("language")
-    if cookie_lang and cookie_lang in Languages.values():
-        return cookie_lang
     # Use the admin's default language
     default_locale = get_config("default_locale")
     if default_locale:
@@ -207,7 +203,7 @@ def get_current_user_recent_ips():
 
 @cache.memoize(timeout=300)
 def get_user_recent_ips(user_id):
-    hour_ago = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
+    hour_ago = datetime.datetime.now() - datetime.timedelta(hours=1)
     addrs = (
         Tracking.query.with_entities(Tracking.ip.distinct())
         .filter(Tracking.user_id == user_id, Tracking.date >= hour_ago)

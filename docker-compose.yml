@@ -1,7 +1,7 @@
 services:
   ctfd:
     build: .
-    user: root
+    user: ctfd
     restart: always
     ports:
       - "8000:8000"
@@ -9,30 +9,46 @@ services:
       - UPLOAD_FOLDER=/var/uploads
       - DATABASE_URL=mysql+pymysql://ctfd:ctfd@db/ctfd
       - REDIS_URL=redis://cache:6379
-      - WORKERS=1
+      - WORKERS=9
       - LOG_FOLDER=/var/log/CTFd
       - ACCESS_LOG=-
       - ERROR_LOG=-
       - REVERSE_PROXY=true
     volumes:
+      - .:/opt/CTFd
       - .data/CTFd/logs:/var/log/CTFd
       - .data/CTFd/uploads:/var/uploads
-      - .:/opt/CTFd:ro
+      - ./CTFd/themes:/opt/CTFd/CTFd/themes
+      - ./CTFd/plugins:/opt/CTFd/CTFd/plugins
     depends_on:
       - db
     networks:
         default:
         internal:
+        ctfrei-bot:
 
-  nginx:
-    image: nginx:stable
+  bot:
+    build:
+      context: ../CTFREI-Bot
+      dockerfile: Dockerfile
+    container_name: bot
     restart: always
-    volumes:
-      - ./conf/nginx/http.conf:/etc/nginx/nginx.conf
     ports:
-      - 80:80
-    depends_on:
-      - ctfd
+      - "5000:5000"
+    environment:
+    volumes:
+      - ../CTFREI-Bot/conf.json:/home/discordbot/conf.json:ro
+      - ../CTFREI-Bot/bot_functions.py:/home/discordbot/bot_functions.py:ro
+      - ../CTFREI-Bot/main.py:/home/discordbot/main.py:ro
+      - ../CTFREI-Bot/registering.py:/home/discordbot/registering.py:ro
+      - ../CTFREI-Bot/settings.py:/home/discordbot/settings.py:ro
+      - ../CTFREI-Bot/log:/home/discordbot/log:rw
+      # - type: bind
+      #   source: /srv/CTFREI-Bot/loops.log
+      #   target: /home/discordbot/loops.log
+    networks:
+      default:
+      ctfrei-bot:
 
   db:
     image: mariadb:10.11
@@ -62,3 +78,5 @@ networks:
     default:
     internal:
         internal: true
+  ctfrei-bot:
+    internal: true

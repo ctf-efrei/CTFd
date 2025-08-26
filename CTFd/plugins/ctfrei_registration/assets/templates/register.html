@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block stylesheets %}
+    <link rel="stylesheet" href="{{ url_for('ctfrei_reg.assets', path='css/register.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="jumbotron">
+	<div class="container">
+		<h1>Register</h1>
+	</div>
+</div>
+<div class="container">
+	<div class="row">
+		<div class="col-md-6 offset-md-3">
+			{% include "components/errors.html" %}
+
+			{% if integrations.mlc() %}
+			<a class="btn btn-secondary btn-lg btn-block" href="{{ url_for('auth.oauth_login') }}">
+				Login with Major League Cyber
+			</a>
+
+			<hr>
+			{% endif %}
+
+			{% from "macros/forms.html" import render_extra_fields %}
+			<form method="post" accept-charset="utf-8" autocomplete="off" role="form">
+				<div class="form-group">
+					<b>{{ form.name.label }}</b>
+					{{ form.name(class="form-control") }}
+					<small class="form-text text-muted">
+						{{ form.name.description }}
+					</small>
+					{% for error in form.name.errors %}
+						<p class="text-danger">{{ error }}</p>
+					{% endfor %}
+				</div>
+				<div class="form-group">
+					<b>{{ form.email.label }}</b>
+					{{ form.email(class="form-control") }}
+					<small class="form-text text-muted">
+						{{ form.email.description }}
+					</small>
+					{% for error in form.email.errors %}
+						<p class="text-danger">{{ error }}</p>
+					{% endfor %}
+				</div>
+				<div class="form-group">
+					<b>{{ form.password.label }}</b>
+					{{ form.password(class="form-control") }}
+					<small class="form-text text-muted">
+						{{ form.password.description }}
+					</small>
+					{% for error in form.password.errors %}
+						<p class="text-danger">{{ error }}</p>
+					{% endfor %}
+				</div>
+
+                <hr/>
+                <hr/>
+
+                <div class="form-group">
+					<b>{{ form.discord_name.label }}</b>
+					{{ form.discord_name(class="form-control") }}
+					<small class="form-text text-muted">
+						{{ form.discord_name.description }}
+					</small>
+					{% for error in form.discord_name.errors %}
+						<p class="text-danger">{{ error }}</p>
+					{% endfor %}
+					<a class="btn btn-md btn-primary btn-send-code" id="verify-discord-btn">
+						Envoyer le code
+					</a>
+				</div>
+
+                <hr/>
+                <hr/>
+
+                <div class="form-group">
+					<b>{{ form.registration_code.label }}</b>
+					{{ form.registration_code(class="form-control") }}
+					<small class="form-text text-muted">
+						{{ form.registration_code.description }}
+					</small>
+					{% for error in form.registration_code.errors %}
+						<p class="text-danger">{{ error }}</p>
+					{% endfor %}
+
+                    <div class="row pt-3">
+                        <div class="col-md-12">
+                            <small class="form-text text-danger hidden" id="code_send_no_discord">
+                                Veuillez spécifier votre pseudo Discord
+                            </small>
+                            <small class="form-text text-danger" id="code_send_error"></small>
+                        </div>
+                    </div>
+				</div>
+				{{ form.nonce() }}
+
+				{{ render_extra_fields(form.extra) }}
+
+                <hr>
+                <hr>
+
+				<div class="row pt-3">
+					<div class="col-md-12">
+						{{ form.submit(class="btn btn-md btn-primary btn-outlined float-right") }}
+					</div>
+				</div>
+
+				{% if Configs.tos_or_privacy %}
+				<div class="row pt-3">
+					<div class="col-md-12 text-center">
+						<small class="text-muted text-center">
+							By registering, you agree to the
+							<a href="{{ Configs.privacy_link }}" rel="noopener" target="_blank">privacy policy</a>
+							and <a href="{{ Configs.tos_link }}" rel="noopener" target="_blank">terms of service</a>
+						</small>
+					</div>
+				</div>
+				{% endif %}
+			</form>
+		</div>
+	</div>
+    <script>
+        const q = document.querySelector.bind(document);
+        const reveal = (query) => {
+          q(query).classList.remove("hidden");
+        }
+        const hide = (query) => {
+          q(query).classList.add("hidden");
+        }
+
+        q("#verify-discord-btn").onclick = ((e) => {
+            e.stopPropagation();
+
+            let username = q("#ctfrei_registration_discord_name").value;
+            if (!username) {
+              reveal("#code_send_no_discord");
+              return;
+            }
+
+            try {
+                fetch(`/plugins/ctfrei_registration/send_code/${username}`, {
+                    headers: {
+                        'X-CSRFToken': q('input[name="ctfrei_registration_nonce"]').value
+                    },
+                }).then(resp => {
+                    hide("#code_send_no_discord");
+
+                    if (!(200 <= resp.status && resp.status <= 299)) {
+                        resp.json().then(d => {
+                            q("#code_send_error").textContent = d.error ?? d.message;
+                        });
+                    } else {
+                        q("#code_send_error").textContent = "";
+						q("#ctfrei_registration_discord_name").classList.add("readonly-field");
+						console.log("Done");
+                    }
+                });
+            } catch (err) {
+                console.error("Error occurred")
+                console.error(err)
+            }
+        });
+    </script>
+</div>
+{% endblock %}
+

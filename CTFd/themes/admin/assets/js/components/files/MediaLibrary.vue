@@ -190,7 +190,7 @@
                 </div>
               </div>
             </div>
-            <input type="hidden" :value="this.media_type" name="type" />
+            <input type="hidden" value="page" name="type" />
           </form>
         </div>
         <div class="modal-footer">
@@ -213,8 +213,8 @@
 import CTFd from "../../compat/CTFd";
 import { default as helpers } from "../../compat/helpers";
 
-function get_page_files(type = "page") {
-  return CTFd.fetch(`/api/v1/files?type=${type}`, {
+function get_page_files() {
+  return CTFd.fetch("/api/v1/files?type=page", {
     credentials: "same-origin",
   }).then(function (response) {
     return response.json();
@@ -229,12 +229,11 @@ export default {
     return {
       files: [],
       selectedFile: null,
-      media_type: "page",
     };
   },
   methods: {
     getPageFiles: function () {
-      get_page_files(this.media_type).then((response) => {
+      get_page_files().then((response) => {
         this.files = response.data;
         return this.files;
       });
@@ -242,16 +241,8 @@ export default {
     uploadChosenFiles: function () {
       // TODO: We should reduce the need to interact with the DOM directly.
       // This looks jank and we should be able to remove it.
-      let extra = {};
-      if (this.editor.element) {
-        let mediaIdTitle = this.editor.element.getAttribute("media-id-title");
-        let mediaId = this.editor.element.getAttribute("media-id");
-        if (mediaId) {
-          extra[mediaIdTitle] = mediaId;
-        }
-      }
       let form = document.querySelector("#media-library-upload");
-      helpers.files.upload(form, extra, (_data) => {
+      helpers.files.upload(form, {}, (_data) => {
         this.getPageFiles();
       });
     },
@@ -263,7 +254,7 @@ export default {
       return CTFd.config.urlRoot + "/files/" + this.selectedFile.location;
     },
     deleteSelectedFile: function () {
-      const file_id = this.selectedFile.id;
+      var file_id = this.selectedFile.id;
 
       if (confirm("Are you sure you want to delete this file?")) {
         CTFd.fetch("/api/v1/files/" + file_id, {
@@ -285,14 +276,14 @@ export default {
       if (editor.hasOwnProperty("codemirror")) {
         editor = editor.codemirror;
       }
-      const doc = editor.getDoc();
-      const cursor = doc.getCursor();
+      let doc = editor.getDoc();
+      let cursor = doc.getCursor();
 
-      const url = this.buildSelectedFileUrl();
-      const img =
+      let url = this.buildSelectedFileUrl();
+      let img =
         this.getIconClass(this.selectedFile.location) === "far fa-file-image";
-      const filename = url.split("/").pop();
-      let link = "[{0}]({1})".format(filename, url);
+      let filename = url.split("/").pop();
+      link = "[{0}]({1})".format(filename, url);
       if (img) {
         link = "!" + link;
       }
@@ -300,11 +291,11 @@ export default {
       doc.replaceRange(link, cursor);
     },
     downloadSelectedFile: function () {
-      const link = this.buildSelectedFileUrl();
+      var link = this.buildSelectedFileUrl();
       window.open(link, "_blank");
     },
     getIconClass: function (filename) {
-      const mapping = {
+      var mapping = {
         // Image Files
         png: "far fa-file-image",
         jpg: "far fa-file-image",
@@ -349,19 +340,11 @@ export default {
         go: "far fa-file-code",
       };
 
-      const ext = filename.split(".").pop();
+      var ext = filename.split(".").pop();
       return mapping[ext] || "far fa-file";
     },
   },
   created() {
-    let element = this.editor.element;
-    let media_type = null;
-    if (element) {
-      media_type = element.getAttribute("media-type");
-    }
-    if (media_type) {
-      this.media_type = media_type;
-    }
     return this.getPageFiles();
   },
 };

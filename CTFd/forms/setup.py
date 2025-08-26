@@ -147,11 +147,4 @@ class SetupForm(BaseForm):
         _l("End Time"),
         description=_l("Time when your CTF is scheduled to end. Optional."),
     )
-
-    social_shares = SelectField(
-        _l("Social Shares"),
-        description="Control whether users can share links commemorating their challenge solves",
-        choices=[("true", "Enabled"), ("false", "Disabled")],
-        default="true",
-    )
     submit = SubmitField(_l("Finish"))

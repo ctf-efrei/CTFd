@@ -24,7 +24,6 @@
           'userId': {{ Session.id }},
           'userName': {{ User.name | tojson }},
           'userEmail': {{ User.email | tojson }},
-          'userVerified': {{ User.verified | tojson }},
           'teamId': {{ Team.id | tojson }},
           'teamName': {{ Team.name | tojson }},
           'start': {{ Configs.start | tojson }},
@@ -46,8 +45,6 @@
   {% block content %}
   {% endblock %}
 </main>
-
-{% include "components/snackbar.html" %}
 
 <footer class="footer">
   <div class="container text-center">

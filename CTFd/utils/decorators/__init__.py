@@ -1,7 +1,6 @@
 import functools
 
 from flask import abort, jsonify, redirect, request, url_for
-from flask_babel import gettext
 
 from CTFd.cache import cache
 from CTFd.utils import config, get_config
@@ -27,17 +26,13 @@ def during_ctf_time_only(f):
                 if view_after_ctf():
                     return f(*args, **kwargs)
                 else:
-                    error = gettext(
-                        "%(ctf_name)s has ended", ctf_name=config.ctf_name()
-                    )
+                    error = "{} has ended".format(config.ctf_name())
                     abort(403, description=error)
             if ctf_started() is False:
                 if is_teams_mode() and get_current_team() is None:
                     return redirect(url_for("teams.private", next=request.full_path))
                 else:
-                    error = gettext(
-                        "%(ctf_name)s has not started yet", ctf_name=config.ctf_name()
-                    )
+                    error = "{} has not started yet".format(config.ctf_name())
                     abort(403, description=error)
 
     return during_ctf_time_only_wrapper

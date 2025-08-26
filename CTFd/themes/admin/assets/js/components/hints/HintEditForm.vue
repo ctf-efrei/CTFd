@@ -26,20 +26,6 @@
                 <div class="col-md-12">
                   <div class="form-group">
                     <label>
-                      Title<br />
-                      <small>Content displayed before hint unlocking</small>
-                    </label>
-                    <input
-                      type="text"
-                      class="form-control"
-                      name="title"
-                      :value="this.title"
-                      ref="title"
-                    />
-                  </div>
-
-                  <div class="form-group">
-                    <label>
                       Hint<br />
                       <small>Markdown &amp; HTML are supported</small>
                     </label>
@@ -124,7 +110,6 @@ export default {
   data: function () {
     return {
       cost: 0,
-      title: null,
       content: null,
       selectedHints: [],
     };
@@ -164,7 +149,6 @@ export default {
           if (response.success) {
             let hint = response.data;
             this.cost = hint.cost;
-            this.title = hint.title;
             this.content = hint.content;
             this.selectedHints = hint.requirements?.prerequisites || [];
             // Wait a little longer because we need the modal to appear.
@@ -191,15 +175,11 @@ export default {
       let editor = this.$refs.content;
       return editor.mde.codemirror.getDoc().getValue();
     },
-    getTitle: function () {
-      return this.$refs.title.value;
-    },
     updateHint: function () {
       let params = {
         challenge_id: this.$props.challenge_id,
         content: this.getContent(),
         cost: this.getCost(),
-        title: this.getTitle(),
         requirements: { prerequisites: this.selectedHints },
       };
 

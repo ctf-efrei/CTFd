@@ -1,5 +1,7 @@
 from enum import Enum
 
+from flask import current_app
+
 JS_ENUMS = {}
 JINJA_ENUMS = {}
 
@@ -56,7 +58,8 @@ def JinjaEnum(cls):
     which allows you to access it from the front end. If you need to access
     an Enum from JS, a better tool to use is the JSEnum decorator.
     """
-    if cls.__name__ not in JINJA_ENUMS:
+    if cls.__name__ not in current_app.jinja_env.globals:
+        current_app.jinja_env.globals[cls.__name__] = cls
         JINJA_ENUMS[cls.__name__] = cls
     else:
         raise KeyError("{} was already defined as a JinjaEnum".format(cls.__name__))
