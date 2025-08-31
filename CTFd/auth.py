@@ -60,7 +60,9 @@ def confirm(data=None):
         )
         db.session.commit()
         clear_user_session(user_id=user.id)
-        email.successful_registration_notification(user.email)
+        # Only send this registration notification if we are preventing access to registered users only
+        if get_config("verify_emails"):
+            email.successful_registration_notification(user.email)
         db.session.close()
         if current_user.authed():
             return redirect(url_for("challenges.listing"))
@@ -488,7 +490,7 @@ def oauth_redirect():
             "client_secret": client_secret,
             "grant_type": "authorization_code",
         }
-        token_request = requests.post(url, data=data, headers=headers)
+        token_request = requests.post(url, data=data, headers=headers, timeout=5)
 
         if token_request.status_code == requests.codes.ok:
             token = token_request.json()["access_token"]
@@ -502,7 +504,7 @@ def oauth_redirect():
                 "Authorization": "Bearer " + str(token),
                 "Content-type": "application/json",
             }
-            api_data = requests.get(url=user_url, headers=headers).json()
+            api_data = requests.get(url=user_url, headers=headers, timeout=5).json()
 
             user_id = api_data["id"]
             user_name = api_data["name"]
