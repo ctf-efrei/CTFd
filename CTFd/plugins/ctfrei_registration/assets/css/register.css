@@ -1,0 +1,21 @@
+.btn-send-code {
+    background-color: #7289DA;
+    color: white;
+    border: none;
+}
+
+.btn-send-code:hover {
+    background-color: #4b65d7;
+    color: white;
+    border: none;
+}
+
+.hidden {
+    display: none;
+}
+
+.readonly-field {
+    pointer-events: none;  /* prevents clicks */
+    background-color: #e9ecef; /* light gray like disabled */
+    color: #495057;  /* normal text color */
+}
