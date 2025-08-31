@@ -13,6 +13,7 @@ from wtforms.validators import DataRequired, InputRequired, ValidationError
 from CTFd.models import db, Users, UserFieldEntries
 from CTFd.plugins import bypass_csrf_protection, register_plugin_assets_directory
 from CTFd.utils.security.auth import login_user
+from CTFd.utils.user import get_current_user, get_current_user_attrs
 from .models import DiscordRegistrations
 from wtforms.form import Form
 
@@ -35,6 +36,8 @@ class DiscordVerifications(db.Model):
 COOLDOWN = 15
 DISCORD_USERNAME_FIELD_ID = 2
 MEMBERSHIP_FIELD_ID = 3
+
+CHALLENGE_MEMBER_TAG = "Adhérent"
 
 def validate_code(form, field):
     entry = DiscordVerifications.query.filter_by(
@@ -284,5 +287,37 @@ def load(app):
         db.session.commit()
 
         return jsonify({"success": f"Rôle mis à jour pour {username}."})
+
+
+    old_func = app.view_functions['api.challenges_challenge_list']
+    def wrapped(*args, **kwargs):
+        response = old_func(*args, **kwargs)
+        data = response.get_json()
+
+        this_user = get_current_user()
+        if not this_user:
+            return {"error": "Not logged in"}, 403
+
+
+        user_membership = UserFieldEntries.query.filter_by(
+            field_id=MEMBERSHIP_FIELD_ID,
+            user_id=this_user.id
+        ).first()
+        if user_membership and user_membership.value == True:
+            return jsonify(data)
+
+        print("Not a member!!! Restrict their ass")
+
+        lst = data.get('data', [])
+        for challenge in lst:
+            tags = challenge.get('tags', [])
+            for tag in tags:
+                if tag.get('value') == CHALLENGE_MEMBER_TAG:
+                    lst.remove(challenge)
+                    break
+        data['data'] = lst
+        return jsonify(data)
+
+    app.view_functions['api.challenges_challenge_list'] = wrapped
 
     app.register_blueprint(discord_bp, url_prefix="/plugins/ctfrei_registration")
