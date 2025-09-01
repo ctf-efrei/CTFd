@@ -1,30 +1,29 @@
-import json, hashlib, hmac, os, random, string
+import hashlib
+import hmac
+import json
+import os
+import random
+import string
+from datetime import datetime, UTC
 from functools import wraps
-from idlelib.rpc import response_queue
 
 import requests as req
-
-from datetime import datetime, UTC
-
 from flask import Blueprint, jsonify, request, redirect, url_for, render_template, session, Response, abort
 from flask_babel import lazy_gettext as _l
 from wtforms import StringField, SubmitField, PasswordField, HiddenField
 from wtforms.fields.html5 import EmailField
+from wtforms.form import Form
 from wtforms.validators import DataRequired, InputRequired, ValidationError
 
-
-from CTFd.api import api, challenges_namespace
+from CTFd.api import api
 from CTFd.models import db, Users, UserFieldEntries, Challenges
 from CTFd.plugins import bypass_csrf_protection, register_plugin_assets_directory
 from CTFd.utils.security.auth import login_user
-from CTFd.utils.user import get_current_user, get_current_user_attrs, is_admin
+from CTFd.utils.user import get_current_user, is_admin
 from .models import DiscordRegistrations
-from wtforms.form import Form
-
 from ...utils import get_config
 from ...utils.decorators import ratelimit
 from ...utils.security.csrf import generate_nonce
-
 
 discord_bp = Blueprint("ctfrei_registration", __name__, template_folder="assets/templates")
 
