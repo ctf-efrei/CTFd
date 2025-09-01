@@ -1,19 +1,23 @@
 import json, hashlib, hmac, os, random, string
+from functools import wraps
+from idlelib.rpc import response_queue
+
 import requests as req
 
 from datetime import datetime, UTC
 
-from flask import Blueprint, jsonify, request, redirect, url_for, render_template, session
+from flask import Blueprint, jsonify, request, redirect, url_for, render_template, session, Response, abort
 from flask_babel import lazy_gettext as _l
 from wtforms import StringField, SubmitField, PasswordField, HiddenField
 from wtforms.fields.html5 import EmailField
 from wtforms.validators import DataRequired, InputRequired, ValidationError
 
 
-from CTFd.models import db, Users, UserFieldEntries
+from CTFd.api import api, challenges_namespace
+from CTFd.models import db, Users, UserFieldEntries, Challenges
 from CTFd.plugins import bypass_csrf_protection, register_plugin_assets_directory
 from CTFd.utils.security.auth import login_user
-from CTFd.utils.user import get_current_user, get_current_user_attrs
+from CTFd.utils.user import get_current_user, get_current_user_attrs, is_admin
 from .models import DiscordRegistrations
 from wtforms.form import Form
 
@@ -163,6 +167,70 @@ def patched_register():
 
     return render_template('plugins/ctfrei_registration/assets/templates/register.html', form=form)
 
+def guard(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if request.method == "OPTIONS":
+            return fn(*args, **kwargs)
+        if is_admin():
+            return fn(*args, **kwargs)
+        user = get_current_user()
+        if not (user and any(f.name == CHALLENGE_MEMBER_TAG and f.value == True
+                               for f in getattr(user, "fields", []))):
+            response = fn(*args, **kwargs)
+            if not response.is_json:
+                return response
+
+            data = response.get_json()
+            if request.path == "/api/v1/challenges":
+                new_data = []
+                for chal in data.get("data", []):
+                    tags = chal.get("tags", [])
+                    if all(tag.get("value", "") != CHALLENGE_MEMBER_TAG for tag in tags):
+                        new_data.append(chal)
+
+                data['data'] = new_data
+                response.set_data(json.dumps(data))
+                return response
+            else:
+                def get_tag(t):
+                    if type(t) == dict:
+                        return t.get("value", "")
+                    if type(t) == str:
+                        return t
+                    if isinstance(t, object):
+                        return t.value
+                    return t
+                def testfor_tags(tagslist):
+                    if any(get_tag(tag) == CHALLENGE_MEMBER_TAG for tag in tagslist):
+                        abort(
+                            403,
+                            description="Vous ne pouvez pas visualiser ce challenge car vous n'etes pas adherent."
+                        )
+                chal_data = data.get("data", [{}])
+                if type(chal_data) == dict:
+                    chal_data = [chal_data]
+                for chal in chal_data:
+                    tags = chal.get("tags", [])
+                    if tags:
+                        testfor_tags(tags)
+                    else:
+                        challenge_id = request.path.split("/")[4]
+                        if not challenge_id.isdigit():
+                            print("Non-digit challenge id, trying to get from data")
+                            challenge_id = request.get_json().get("challenge_id", None) if request.is_json else None
+                            if not challenge_id or not str(challenge_id).isdigit():
+                                print(f"No challenge id found in data either: {data}")
+                                abort(404)
+
+                        chal_obj = Challenges.query.filter_by(id=int(challenge_id)).first()
+                        if not chal_obj:
+                            abort(404)
+                        testfor_tags(chal_obj.tags)
+
+        return fn(*args, **kwargs)
+    return wrapper
+
 def load(app):
     app.config['TEMPLATES_AUTO_RELOAD'] = True
     app.jinja_env.auto_reload = True
@@ -173,6 +241,11 @@ def load(app):
     db.create_all()
 
     app.view_functions['auth.register'] = patched_register
+
+    for rule in app.url_map.iter_rules():
+        if rule.rule.startswith("/api/v1/challenges"):
+            endpoint = rule.endpoint
+            app.view_functions[endpoint] = guard(app.view_functions[endpoint])
 
     @discord_bp.route("/send_code/<discord>", methods=["GET"])
     @ratelimit(method="GET", limit=10, interval=5)
@@ -289,24 +362,73 @@ def load(app):
         return jsonify({"success": f"Rôle mis à jour pour {username}."})
 
 
-    old_func = app.view_functions['api.challenges_challenge_list']
-    def wrapped(*args, **kwargs):
-        response = old_func(*args, **kwargs)
+    # all challenge endpoints, basically
+    RESTRICTED_ENDPOINTS = [
+        'api.challenges_challenge_types',
+        'api.challenges_challenge',
+        'api.challenges_challenge_attempt',
+        'api.challenges_challenge_solves',
+        'api.challenges_challenge_files',
+        'api.challenges_challenge_tags',
+        'api.challenges_challenge_hints',
+        'api.challenges_challenge_flags',
+        'api.challenges_challenge_requirements',
+        'api.challenges_challenge_ratings',
+    ]
+    for endpoint in RESTRICTED_ENDPOINTS:
+        old_viewfunc = app.view_functions.get(endpoint)
+        if not old_viewfunc:
+            print(f"[ERROR] Could not find endpoint {endpoint} to patch!")
+            exit(-1)
+
+        print(f"[DEBUG] Patching endpoint {endpoint} ({old_viewfunc})")
+        def viewfunc_wrapper(*args, **kwargs):
+            response = old_viewfunc(*args, **kwargs)
+            data = response.get_json()
+
+            this_user = get_current_user()
+            if not this_user:
+                return {"error": "Not logged in"}, 401
+
+            print(request, request.path, args, kwargs)
+            chal = Challenges.query.filter_by(id=kwargs.get('challenge_id')).first()
+            if not chal:
+                return {"error": "Challenge not found"}, 404
+            tags = chal.tags
+            is_member_challenge = any(tag.value == CHALLENGE_MEMBER_TAG for tag in tags)
+            if not is_member_challenge:
+                return jsonify(data)
+
+            user_membership = any(
+                (field and field.name == CHALLENGE_MEMBER_TAG and field.value == True) for field in this_user.fields
+            )
+            if user_membership:
+                return jsonify(data)
+
+            print(f"{this_user.name or 'Jean-Neuill'} not a member!!! Deny their ass on endpoint {endpoint}")
+
+            # carry over success status and other keys from endpoints' oldfunc
+            return {}, 403
+        # app.view_functions[endpoint] = viewfunc_wrapper
+        print("[DEBUG] Patching done.")
+
+    print("[DEBUG] Finally, patching challenge list")
+    old_challist = app.view_functions['api.challenges_challenge_list']
+    def challist_wrapper(*args, **kwargs):
+        response = old_challist(*args, **kwargs)
         data = response.get_json()
 
         this_user = get_current_user()
         if not this_user:
-            return {"error": "Not logged in"}, 403
+            return {"error": "Not logged in"}, 401
 
-
-        user_membership = UserFieldEntries.query.filter_by(
-            field_id=MEMBERSHIP_FIELD_ID,
-            user_id=this_user.id
-        ).first()
-        if user_membership and user_membership.value == True:
+        user_membership = any(
+            (field and field.name == CHALLENGE_MEMBER_TAG and field.value == True) for field in this_user.fields
+        )
+        if user_membership:
             return jsonify(data)
 
-        print("Not a member!!! Restrict their ass")
+        print(f"{this_user.name or 'Jean-Neuill'} not a member!!! Restrict their ass on endpoint {endpoint}")
 
         lst = data.get('data', [])
         for challenge in lst:
@@ -317,7 +439,30 @@ def load(app):
                     break
         data['data'] = lst
         return jsonify(data)
+    # app.view_functions['api.challenges_challenge_list'] = challist_wrapper
 
-    app.view_functions['api.challenges_challenge_list'] = wrapped
+    for r in app.view_functions:
+        print(f"[DEBUG] Route: {r} -> {app.view_functions[r]}")
+
+    # @app.after_request
+    def modify_api_response(response: Response):
+        if request.path.startswith("/api/v1/challenges"):
+            if response.is_json:
+                data = response.get_json()
+                print(api.endpoint, dir(api))
+                this_user = get_current_user()
+                user_membership = any(
+                    (field and field.name == CHALLENGE_MEMBER_TAG and field.value == True) for field in this_user.fields
+                )
+                if not user_membership:
+                    new_data = []
+                    for chal in data.get("data", []):
+                        tags = chal.get('tags', [])
+                        is_member_challenge = any(tag.get('value') == CHALLENGE_MEMBER_TAG for tag in tags)
+                        if not is_member_challenge:
+                            new_data.append(chal)
+                    data['data'] = new_data
+                    response.set_data(json.dumps(data))
+        return response
 
     app.register_blueprint(discord_bp, url_prefix="/plugins/ctfrei_registration")
