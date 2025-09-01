@@ -11116,7 +11116,8 @@ h4,
 h5,
 h6,
 a,
-p {
+p,
+li {
     color: white !important;
 }
 
