@@ -145,11 +145,17 @@ def patched_register():
             )
             db.session.add(discord_name)
 
+            res = req.get(f"http://bot:5000/is_member/{discord_username}", headers={"Content-Type": "application/json"})
+            if res.status_code == 200:
+                is_member = res.json().get("is_member", False)
+            else:
+                print(f"Could not verify membership status, assuming false: {res.status_code} {res.text}")
+                is_member = False
             membership = UserFieldEntries(
                 type="user",
                 field_id=MEMBERSHIP_FIELD_ID,
                 user_id=user.id,
-                value=False
+                value=is_member
             )
             db.session.add(membership)
             db.session.delete(discord_verif_obj)
@@ -172,8 +178,14 @@ def guard(fn):
     def wrapper(*args, **kwargs):
         if request.method == "OPTIONS":
             return fn(*args, **kwargs)
+
+        if request.path.startswith("/static/") or request.path.startswith("/themes/") \
+                or request.path.startswith("/plugins/") or request.path.startswith("/assets/"):
+            return fn(*args, **kwargs)
+
         if is_admin():
             return fn(*args, **kwargs)
+
         user = get_current_user()
         if not (user and any(f.name == CHALLENGE_MEMBER_TAG and f.value == True
                                for f in getattr(user, "fields", []))):
@@ -240,12 +252,14 @@ def load(app):
 
     db.create_all()
 
-    app.view_functions['auth.register'] = patched_register
-
     for rule in app.url_map.iter_rules():
         if rule.rule.startswith("/api/v1/challenges"):
             endpoint = rule.endpoint
-            app.view_functions[endpoint] = guard(app.view_functions[endpoint])
+
+            if endpoint in app.view_functions:
+                app.view_functions[endpoint] = guard(app.view_functions[endpoint])
+
+    app.view_functions['auth.register'] = patched_register
 
     @discord_bp.route("/send_code/<discord>", methods=["GET"])
     @ratelimit(method="GET", limit=10, interval=5)
@@ -300,6 +314,7 @@ def load(app):
         try:
             res_json = res.json()
             if res_json.get("status") != "ok":
+                print(f"Error response from bot: {res_json}")
                 if res_json.get("code") == 404:
                     return jsonify(
                         {
@@ -309,7 +324,8 @@ def load(app):
                     return jsonify({"error": "Le bot n'a pas réussi à t'envoyer un message. Vérifie tes paramètres de confidentialité Discord !"}), 403
 
                 return jsonify({"error": "Le bot dort... Contacte un admin !"}), 500
-        except:
+        except Exception as e:
+            print(f"Could not parse JSON response from bot: {e} {res.text}")
             return jsonify({"error": "Le bot dort... Contacte un admin !"}), 500
 
         return jsonify({"success": f"Code envoyé à {username}."})
