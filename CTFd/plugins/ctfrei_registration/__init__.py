@@ -8,16 +8,17 @@ from datetime import datetime, UTC
 from functools import wraps
 
 import requests as req
-from flask import Blueprint, jsonify, request, redirect, url_for, render_template, session, Response, abort
+from flask import Blueprint, jsonify, request, redirect, url_for, render_template, session, abort
 from flask_babel import lazy_gettext as _l
 from wtforms import StringField, SubmitField, PasswordField, HiddenField
 from wtforms.fields.html5 import EmailField
 from wtforms.form import Form
 from wtforms.validators import DataRequired, InputRequired, ValidationError
 
-from CTFd.api import api
 from CTFd.models import db, Users, UserFieldEntries, Challenges
 from CTFd.plugins import bypass_csrf_protection, register_plugin_assets_directory
+from CTFd.utils import email
+from CTFd.utils.decorators.visibility import check_registration_visibility
 from CTFd.utils.security.auth import login_user
 from CTFd.utils.user import get_current_user, is_admin
 from .models import DiscordRegistrations
@@ -110,6 +111,14 @@ def patched_register():
     print("==================")
     if request.method == 'POST':
         if form.validate():
+
+            if email.check_email_is_whitelisted(form.email.data) is False:
+                form.email.errors.append(_l("Your email address is not from an allowed domain"))
+                return render_template('plugins/ctfrei_registration/assets/templates/register.html', form=form)
+            if email.check_email_is_blacklisted(form.email.data) is True:
+                form.email.errors.append(_l("Your email address is not from an allowed domain"))
+                return render_template('plugins/ctfrei_registration/assets/templates/register.html', form=form)
+
             print("Form *seems* valid!")
             if form.nonce.data != session.get('nonce'):
                 print("CSRF attack detected! piss off will ya")
@@ -376,108 +385,7 @@ def load(app):
 
         return jsonify({"success": f"Rôle mis à jour pour {username}."})
 
-
-    # all challenge endpoints, basically
-    RESTRICTED_ENDPOINTS = [
-        'api.challenges_challenge_types',
-        'api.challenges_challenge',
-        'api.challenges_challenge_attempt',
-        'api.challenges_challenge_solves',
-        'api.challenges_challenge_files',
-        'api.challenges_challenge_tags',
-        'api.challenges_challenge_hints',
-        'api.challenges_challenge_flags',
-        'api.challenges_challenge_requirements',
-        'api.challenges_challenge_ratings',
-    ]
-    for endpoint in RESTRICTED_ENDPOINTS:
-        old_viewfunc = app.view_functions.get(endpoint)
-        if not old_viewfunc:
-            print(f"[ERROR] Could not find endpoint {endpoint} to patch!")
-            exit(-1)
-
-        print(f"[DEBUG] Patching endpoint {endpoint} ({old_viewfunc})")
-        def viewfunc_wrapper(*args, **kwargs):
-            response = old_viewfunc(*args, **kwargs)
-            data = response.get_json()
-
-            this_user = get_current_user()
-            if not this_user:
-                return {"error": "Not logged in"}, 401
-
-            print(request, request.path, args, kwargs)
-            chal = Challenges.query.filter_by(id=kwargs.get('challenge_id')).first()
-            if not chal:
-                return {"error": "Challenge not found"}, 404
-            tags = chal.tags
-            is_member_challenge = any(tag.value == CHALLENGE_MEMBER_TAG for tag in tags)
-            if not is_member_challenge:
-                return jsonify(data)
-
-            user_membership = any(
-                (field and field.name == CHALLENGE_MEMBER_TAG and field.value == True) for field in this_user.fields
-            )
-            if user_membership:
-                return jsonify(data)
-
-            print(f"{this_user.name or 'Jean-Neuill'} not a member!!! Deny their ass on endpoint {endpoint}")
-
-            # carry over success status and other keys from endpoints' oldfunc
-            return {}, 403
-        # app.view_functions[endpoint] = viewfunc_wrapper
-        print("[DEBUG] Patching done.")
-
-    print("[DEBUG] Finally, patching challenge list")
-    old_challist = app.view_functions['api.challenges_challenge_list']
-    def challist_wrapper(*args, **kwargs):
-        response = old_challist(*args, **kwargs)
-        data = response.get_json()
-
-        this_user = get_current_user()
-        if not this_user:
-            return {"error": "Not logged in"}, 401
-
-        user_membership = any(
-            (field and field.name == CHALLENGE_MEMBER_TAG and field.value == True) for field in this_user.fields
-        )
-        if user_membership:
-            return jsonify(data)
-
-        print(f"{this_user.name or 'Jean-Neuill'} not a member!!! Restrict their ass on endpoint {endpoint}")
-
-        lst = data.get('data', [])
-        for challenge in lst:
-            tags = challenge.get('tags', [])
-            for tag in tags:
-                if tag.get('value') == CHALLENGE_MEMBER_TAG:
-                    lst.remove(challenge)
-                    break
-        data['data'] = lst
-        return jsonify(data)
-    # app.view_functions['api.challenges_challenge_list'] = challist_wrapper
-
-    for r in app.view_functions:
-        print(f"[DEBUG] Route: {r} -> {app.view_functions[r]}")
-
-    # @app.after_request
-    def modify_api_response(response: Response):
-        if request.path.startswith("/api/v1/challenges"):
-            if response.is_json:
-                data = response.get_json()
-                print(api.endpoint, dir(api))
-                this_user = get_current_user()
-                user_membership = any(
-                    (field and field.name == CHALLENGE_MEMBER_TAG and field.value == True) for field in this_user.fields
-                )
-                if not user_membership:
-                    new_data = []
-                    for chal in data.get("data", []):
-                        tags = chal.get('tags', [])
-                        is_member_challenge = any(tag.get('value') == CHALLENGE_MEMBER_TAG for tag in tags)
-                        if not is_member_challenge:
-                            new_data.append(chal)
-                    data['data'] = new_data
-                    response.set_data(json.dumps(data))
-        return response
+    # for r in app.view_functions:
+    #     print(f"[DEBUG] Route: {r} -> {app.view_functions[r]}")
 
     app.register_blueprint(discord_bp, url_prefix="/plugins/ctfrei_registration")
