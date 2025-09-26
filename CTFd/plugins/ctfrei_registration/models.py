@@ -8,3 +8,9 @@ class DiscordRegistrations(db.Model):
     discord_id = db.Column(db.String(64), nullable=False)
     code = db.Column(db.String(32), nullable=False)
     requested_at = db.Column(db.DateTime, default=datetime.now(UTC))
+
+class DiscordVerifications(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    discord_username = db.Column(db.String(64), unique=True)
+    code = db.Column(db.String(24))
+    created_at = db.Column(db.DateTime, default=datetime.now(UTC))
