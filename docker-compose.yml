@@ -23,7 +23,12 @@ services:
       - ./CTFd/themes:/opt/CTFd/CTFd/themes
       - ./CTFd/plugins:/opt/CTFd/CTFd/plugins
     depends_on:
-      - db
+      permissions:
+        condition: service_completed_successfully
+      db:
+        condition: service_started
+      cache:
+        condition: service_started
     networks:
       default:
       internal:
@@ -52,6 +57,25 @@ services:
     networks:
       default:
       ctfrei-bot:
+
+  # TODO: CTFd 4.0 Migrate to named volumes. Users will likely need to manually migrate existing files
+  permissions:
+    image: alpine:3.23
+    user: root
+    volumes:
+      - .data/CTFd/logs:/var/log/CTFd
+      - .data/CTFd/uploads:/var/uploads
+    command: chown -R 1001:1001 /var/uploads /var/log/CTFd
+
+  nginx:
+    image: nginx:stable
+    restart: always
+    volumes:
+      - ./conf/nginx/http.conf:/etc/nginx/nginx.conf
+    ports:
+      - 80:80
+    depends_on:
+      - ctfd
 
   db:
     image: mariadb:10.11
